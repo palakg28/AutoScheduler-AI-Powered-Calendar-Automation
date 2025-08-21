@@ -1,40 +1,14 @@
 flowchart LR
-  T[Sheets Trigger (new row)]
-  I[Add Index]
-  N[Normalize + detect needsAPI]
-  ENC[Encode address]
-  GEO[Geocode (Maps)]
-  PASS[Pass-through]
-  M1[Merge geocoded + original]
-  S[Sort by Index]
+  T["Sheets Trigger (new row)"] --> I["Add Index"] --> N["Normalize + detect needsAPI"]
+  N -->|needsAPI = true| ENC["Encode address"] --> GEO["Geocode (Maps)"] --> M1["Merge geocoded + original"]
+  N -->|needsAPI = false| PASS["Pass-through"] --> M1
+  M1 --> S["Sort by Index"]
 
-  CF[Filter Confirmed >= 2025-07-01]
-  PD[Filter Pending >= 2025-07-01]
+  S --> CF["Filter Confirmed >= 2025-07-01"]
+  S --> PD["Filter Pending >= 2025-07-01"]
 
-  ST[Read Staff Sheet]
-  A2[Aggregate Staff]
-  A1[Aggregate Confirmed]
-  RFC1[Build RFC 3339 (confirmed)]
-  CAL1[Create Mock Calendar Events]
+  CF --> ST["Read Staff Sheet"] --> A2["Aggregate Staff"]
+  CF --> A1["Aggregate Confirmed"]
+  CF --> RFC1["Build RFC 3339 (confirmed)"] --> CAL1["Create Mock Calendar Events"]
 
-  M2[Merge Pending x Confirmed]
-  M3[+ Staff List]
-  ASSIGN[Assign Staff (cap / rest / proximity)]
-  CLEAN[Drop large arrays]
-  RFC2[Build RFC 3339 (assigned)]
-  CAL2[Create Final Calendar Events]
-  WB[Write back Status=Confirmed (+eventId) to Sheet]
-
-  T --> I --> N
-  N -->|needsAPI = true| ENC --> GEO --> M1
-  N -->|needsAPI = false| PASS --> M1
-  M1 --> S
-
-  S --> CF
-  S --> PD
-
-  CF --> ST --> A2
-  CF --> A1
-  CF --> RFC1 --> CAL1
-
-  PD --> M2 --> M3 --> ASSIGN --> CLEAN --> RFC2 --> CAL2 --> WB
+  PD --> M2["Merge Pending x Confirmed"] --> M3["+ Staff List"] --> ASSIGN["Assign Staff (cap / rest / proximity)"] --> CLEAN["Drop large arrays"] --> RFC2["Build RFC 3339 (assigned)"] --> CAL2["Create Final Calendar Events"] --> WB["Write back Status=Confirmed (+eventId) to Sheet"]
