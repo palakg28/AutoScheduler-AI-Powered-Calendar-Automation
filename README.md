@@ -23,11 +23,6 @@ Here’s the automated workflow for booking, staff assignment, and calendar inte
 
 ![Workflow Diagram](images/workflow-overview.png)
 
-![Workflow overview](assets/workflow-overview.png "n8n pipeline")  
-![Assignments sub-flow](assets/workflow-assignments.png "assignment logic and merges")  
-![Month calendar](assets/calendar-month.png "resulting events across the month")  
-![Day calendar](assets/calendar-day.png "no overlaps + rest gaps")
-
 ## How it works (high-level)
 - Google Sheets “row added” **triggers** the workflow.
 - **Normalize** and detect if geocoding is needed; **enrich** with Google Maps when ward/postal is missing.
