@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Node / n8n-ish
+node_modules/
+.env
+.env.*
+*.local
+*.log
+.n8n/
