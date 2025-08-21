@@ -1,14 +1,39 @@
-flowchart LR
-  T["Sheets Trigger (new row)"] --> I["Add Index"] --> N["Normalize + detect needsAPI"]
-  N -->|needsAPI = true| ENC["Encode address"] --> GEO["Geocode (Maps)"] --> M1["Merge geocoded + original"]
-  N -->|needsAPI = false| PASS["Pass-through"] --> M1
-  M1 --> S["Sort by Index"]
+flowchart TB
+  %% ====== PHASE 1: Ingest & Normalize ======
+  subgraph INGEST["1) Ingest & Normalize"]
+    T["Sheets Trigger (new row)"] --> I["Add Index"] --> N["Normalize + detect needsAPI"]
+    N -->|needsAPI = true| ENC["Encode address"] --> GEO["Geocode (Maps)"] --> M0["Merge geocoded + original"]
+    N -->|needsAPI = false| PASS["Pass-through"] --> M0
+    M0 --> S["Sort by Index"]
+  end
 
-  S --> CF["Filter Confirmed >= 2025-07-01"]
-  S --> PD["Filter Pending >= 2025-07-01"]
+  %% ====== PHASE 2: Partition ======
+  subgraph PART["2) Partition"]
+    S --> CF["Filter Confirmed >= 2025-07-01"]
+    S --> PD["Filter Pending >= 2025-07-01"]
+  end
 
-  CF --> ST["Read Staff Sheet"] --> A2["Aggregate Staff"]
-  CF --> A1["Aggregate Confirmed"]
-  CF --> RFC1["Build RFC 3339 (confirmed)"] --> CAL1["Create Mock Calendar Events"]
+  %% ====== PHASE 3a: Confirmed (Mock Calendar) ======
+  subgraph CONF["3a) Confirmed path (mock calendar)"]
+    CF --> ST["Read Staff Sheet"] --> A2["Aggregate Staff"]
+    CF --> A1["Aggregate Confirmed"]
+    CF --> RFC1["Build RFC 3339 (confirmed)"] --> CAL1["Create Mock Calendar Events"]
+  end
 
-  PD --> M2["Merge Pending x Confirmed"] --> M3["+ Staff List"] --> ASSIGN["Assign Staff (cap / rest / proximity)"] --> CLEAN["Drop large arrays"] --> RFC2["Build RFC 3339 (assigned)"] --> CAL2["Create Final Calendar Events"] --> WB["Write back Status=Confirmed (+eventId) to Sheet"]
+  %% ====== PHASE 3b: Pending (Assignment + Final) ======
+  subgraph PEND["3b) Pending path (assignment + final)"]
+    PD --> M2["Merge Pending x Confirmed"] --> M3["+ Staff List"]
+    M3 --> ASSIGN["Assign Staff (cap / rest / proximity)"] --> CLEAN["Drop large arrays"]
+    CLEAN --> RFC2["Build RFC 3339 (assigned)"] --> CAL2["Create Final Calendar Events"] --> WB["Write back Status=Confirmed (+eventId)"]
+  end
+
+  %% ====== COLORS ======
+  classDef cIngest   fill:#e8f4ff,stroke:#1e66f5,color:#111,stroke-width:1px;
+  classDef cPart     fill:#fff8e1,stroke:#f59e0b,color:#111,stroke-width:1px;
+  classDef cConfirm  fill:#eafaf1,stroke:#10b981,color:#111,stroke-width:1px;
+  classDef cPending  fill:#fef2f2,stroke:#ef4444,color:#111,stroke-width:1px;
+
+  class T,I,N,ENC,GEO,M0,PASS,S cIngest;
+  class CF,PD cPart;
+  class ST,A2,A1,RFC1,CAL1 cConfirm;
+  class M2,M3,ASSIGN,CLEAN,RFC2,CAL2,WB cPending;
