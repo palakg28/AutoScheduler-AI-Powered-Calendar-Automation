@@ -18,8 +18,8 @@
 - **Skills demonstrated**: n8n, Google Sheets/Calendar APIs, HTTP/REST, regex/JS data cleaning,
   scheduling algorithms, RFC 3339 time handling, and production-style documentation.
 
-## Visuals (add your screenshots)
-> Replace these placeholders with your images in `/assets`.
+## Visuals
+ /images
 
 ![Workflow overview](assets/workflow-overview.png "n8n pipeline")  
 ![Assignments sub-flow](assets/workflow-assignments.png "assignment logic and merges")  
