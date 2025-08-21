@@ -69,7 +69,7 @@ See the detailed diagrams and data contracts in `/docs`.
 - `/docs` – architecture, flowchart, rules, data contracts, reliability, troubleshooting.
 - `/workflow` – the n8n JSON export and credential notes.
 - `/examples` – sample CSVs + a tiny RFC 3339 validation script.
-- `/assets` – add your screenshots here.
+- `/images` – add your screenshots here.
 
 ## License
 MIT – see [LICENSE](LICENSE).
