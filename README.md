@@ -19,7 +19,9 @@
   scheduling algorithms, RFC 3339 time handling, and production-style documentation.
 
 ## Visuals
- /images
+Here’s the automated workflow for booking, staff assignment, and calendar integration:
+
+![Workflow Diagram](images/workflow-overview.png)
 
 ![Workflow overview](assets/workflow-overview.png "n8n pipeline")  
 ![Assignments sub-flow](assets/workflow-assignments.png "assignment logic and merges")  
