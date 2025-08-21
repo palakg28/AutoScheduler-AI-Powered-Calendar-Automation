@@ -1,0 +1,802 @@
+{	
+name	"Palak - Tokyo Cleaner Calendar Agent"
+nodes	
+0	
+parameters	
+conditions	
+options	
+caseSensitive	true
+leftValue	""
+typeValidation	"strict"
+version	2
+conditions	
+0	
+id	"48f78db9-33ec-4351-bcbf-8e7f9b5eb47e"
+leftValue	"={{ $json.needsAPI }}"
+rightValue	"true"
+operator	
+type	"boolean"
+operation	"true"
+singleValue	true
+combinator	"and"
+options	{}
+type	"n8n-nodes-base.if"
+typeVersion	2.2
+position	
+0	120
+1	-1020
+id	"06ca3ff4-c1aa-4918-83c7-6ecc0be814b1"
+name	"If"
+1	
+parameters	
+jsCode	'function extractPostal(Address) {\n  if (!Address || typeof Address !== "string") return null;\n  const match = Address.match(/\\d{3}-\\d{4}/);\n  return match ? match[0] : null;\n}\n\nfunction extractWard(Address) {\n  if (!Address || typeof Address !== "string") return null;\n  const wards = [\n    "Shibuya", "Setagaya", "Minato", "Meguro", "Shinjuku",\n    "Chiyoda", "Chuo", "Koto", "Bunkyo", "Taito",\n    "Sumida", "Itabashi", "Nakano", "Arakawa", "Suginami",\n    "Kita", "Edogawa", "Adachi", "Ota", "Toshima"\n  ];\n  for (const ward of wards) {\n    if (Address.toLowerCase().includes(ward.toLowerCase())) {\n      return ward;\n    }\n  }\n  return null;\n}\n\nreturn items\n  .filter(item => item.json.Address && typeof item.json.Address === "string" && item.json.Address.trim() !== "")\n  .map((item, index) => {\n    const Address = item.json.Address.trim();\n\n    let postal = extractPostal(Address);\n    let ward = extractWard(Address);\n    let needsAPI = (!postal || !ward);\n    let status = item.json.Status || "";\n\n    return {\n      json: {\n        Index: index + 1,\n        "Type of Cleaning": item.json.Service || "",\n        "Client Name": item.json.Name || "",\n        "Date of Cleaning": item.json.Date || "",\n        "Time of Cleaning": item.json.Time || "",\n        "Address Line": Address,\n        postal_code: postal,\n        ward_district: ward,\n        Status: status,\n        needsAPI: needsAPI\n      }\n    };\n  });\n'
+type	"n8n-nodes-base.code"
+typeVersion	2
+position	
+0	-100
+1	-960
+id	"bb4e8913-3530-4dfb-8261-7e1c32019207"
+name	"Normalizing table - deleteing missing address rows, only keeping the important columns, and renaming (deleted 5 entries)"
+2	
+parameters	
+jsCode	'return items.map(item => {\n  const address = item.json["Address Line"];\n\n  if (!address || typeof address !== "string" || address.trim() === "") {\n    throw new Error(`Missing or invalid Address Line at index ${item.json.Index}`);\n  }\n\n  return {\n    json: {\n      ...item.json,\n      encodedAddress: encodeURIComponent(address.trim())\n    }\n  };\n});\n'
+type	"n8n-nodes-base.code"
+typeVersion	2
+position	
+0	240
+1	-1420
+id	"5bfeab5c-53d1-450b-ae6f-66eefa6047ed"
+name	"preparing and encoding the address string so that it's safe to include in a URL for the Google Maps API. - ADDS A ENCODING ADDRESS COLUMN"
+3	
+parameters	
+url	'=https://maps.googleapis.com/maps/api/geocode/json?address={{$json.encodedAddress}}&key="API Key"'
+options	{}
+type	"n8n-nodes-base.httpRequest"
+typeVersion	4.2
+position	
+0	380
+1	-1620
+id	"fbb3d39f-9619-430d-92c9-b00f0138e4a0"
+name	"HTTP Request - google maps API to find missing postal code and ward district"
+4	
+parameters	
+mode	"combine"
+combineBy	"combineByPosition"
+options	{}
+type	"n8n-nodes-base.merge"
+typeVersion	3.1
+position	
+0	540
+1	-1400
+id	"837d81a6-4a19-45c1-8349-033d7cce80f1"
+name	"Merging the two tables to get one output table"
+5	
+parameters	
+jsCode	`return items.map(({ json }, i) => {\n  const results = json.results || json.geo?.results || [];\n  const best = results.find(r => (r.types || []).includes('street_address') || (r.types || []).includes('premise')) || results[0];\n  const ac = best?.address_components || [];\n  const pick = t => ac.find(c => (c.types || []).includes(t))?.long_name || null;\n\n  const pc  = pick('postal_code') ?? json.postal_code ?? null;\n  const wd  = pick('locality') || pick('administrative_area_level_2') || pick('sublocality_level_2') || pick('sublocality') || json.ward_district || null;\n  const clean = v => typeof v === 'string' ? v.trim() : v;\n\n  return {\n    json: {\n      "Index": json.Index ?? i + 1,\n      "Type of Cleaning": clean(json["Type of Cleaning"]),\n      "Client Name": clean(json["Client Name"]),\n      "Date of Cleaning": clean(json["Date of Cleaning"]),\n      "Time of Cleaning": clean(json["Time of Cleaning"]),\n      "Address Line": clean(json["Address Line"]),\n      "postal_code": clean(pc),\n      "ward_district": clean(wd),\n      "Status": clean(json.Status),\n    }\n  };\n});\n`
+type	"n8n-nodes-base.code"
+typeVersion	2
+position	
+0	820
+1	-1400
+id	"240e2017-345a-4e7b-a33a-1f560c436902"
+name	"Finalizing the table to get all entries that needed API into one table with all desired columns"
+6	
+parameters	
+jsCode	"return items.map(i => {\n  delete i.json.needsAPI;\n  return i;\n});"
+type	"n8n-nodes-base.code"
+typeVersion	2
+position	
+0	240
+1	-800
+id	"9a8ce094-064e-4edd-83b9-16db70dec8af"
+name	"Taking the entries that did not need an API and removing the needsAPI column for clarity"
+7	
+parameters	{}
+type	"n8n-nodes-base.merge"
+typeVersion	3.1
+position	
+0	720
+1	-1060
+id	"804ecbd5-2bba-4085-815a-76be07fc5475"
+name	"Merging both the tables together - 1) entries that needed an API, 2) entries that did not into one table"
+8	
+parameters	
+sortFieldsUi	
+sortField	
+0	
+fieldName	"Index"
+options	{}
+type	"n8n-nodes-base.sort"
+typeVersion	1
+position	
+0	1000
+1	-1060
+id	"5c35f557-a471-4c34-867d-d8a0061004e1"
+name	"Sorting by ascending index"
+9	
+parameters	
+jsCode	`const cutoff = new Date('2025-07-01T00:00:00Z');\n\nfunction toDate(dateStr, timeStr) {\n  const [m,d,y] = String(dateStr||'').split(/[\\/\\-]/).map(n=>parseInt(n,10));\n  const [H,Mi,S=0] = String(timeStr||'00:00:00').split(':').map(n=>parseInt(n,10));\n  if (!y || !m || !d) return null;\n  return new Date(y, m-1, d, H, Mi, S);\n}\n\nconst out = items\n  .map(({json}) => {\n    const dt = toDate(json["Date of Cleaning"], json["Time of Cleaning"]);\n    const statusNorm = String(json.Status||'').trim().toLowerCase();\n    return { json, dt, statusNorm };\n  })\n  .filter(x => x.dt && x.dt >= cutoff && x.statusNorm === 'confirmed')\n  .sort((a,b) => a.dt - b.dt)\n  .map((x,i) => ({\n    json: {\n      "Index": x.json.Index, // or i+1 to reindex\n      "Type of Cleaning": x.json["Type of Cleaning"],\n      "Client Name": x.json["Client Name"],\n      "Date of Cleaning": x.json["Date of Cleaning"],\n      "Time of Cleaning": x.json["Time of Cleaning"],\n      "Address Line": x.json["Address Line"],\n      "postal_code": x.json.postal_code,\n      "ward_district": x.json.ward_district,\n      "Status": x.json.Status\n    }\n  }));\n\nreturn out;\n`
+type	"n8n-nodes-base.code"
+typeVersion	2
+position	
+0	1160
+1	-800
+id	"4955cc94-c22f-4139-b302-e606b1369914"
+name	"Sorting by date July 2025 and beyond and by confirmed status to create a placeholder calendar"
+10	
+parameters	
+documentId	
+__rl	true
+value	"1w4RWajT-unRy-n1NoXzBwQnugqhByQvgUeLpHJmn2mM"
+mode	"list"
+cachedResultName	"Tokyo cleaners new sheet"
+cachedResultUrl	"https://docs.google.com/spreadsheets/d/1w4RWajT-unRy-n1NoXzBwQnugqhByQvgUeLpHJmn2mM/edit?usp=drivesdk"
+sheetName	
+__rl	true
+value	1657973715
+mode	"list"
+cachedResultName	"Sheet2"
+cachedResultUrl	"https://docs.google.com/spreadsheets/d/1w4RWajT-unRy-n1NoXzBwQnugqhByQvgUeLpHJmn2mM/edit#gid=1657973715"
+options	{}
+type	"n8n-nodes-base.googleSheets"
+typeVersion	4.5
+position	
+0	1500
+1	-760
+id	"30a57088-d3e1-4947-a123-31907b5c4103"
+name	"Reading the staff ID and name sheet"
+executeOnce	true
+credentials	
+googleSheetsOAuth2Api	
+id	"cJh33bfyxmSZNXwc"
+name	"Google Sheets account 7"
+11	
+parameters	
+mode	"combine"
+combineBy	"combineAll"
+options	{}
+type	"n8n-nodes-base.merge"
+typeVersion	3.1
+position	
+0	1860
+1	-480
+id	"0a9fa07b-3210-487f-97c0-c7b8196d4af8"
+name	"Merge the tables into one with the staff id and name info included"
+12	
+parameters	
+jsCode	`// For each booking, pick ONE random staff from the attached array\n// and add two new fields: "Staff ID" and "Staff Name".\nreturn items.map(({ json }) => {\n  const list = json.staffList || json.data || [];   // support either field name\n  if (!Array.isArray(list) || list.length === 0) {\n    throw new Error('No staff array on item. Make sure the right input to Merge was the Aggregate (single-item) output.');\n  }\n\n  // pick a random staff\n  const pick = list[Math.floor(Math.random() * list.length)];\n\n  // add the two new columns\n  json["Staff ID"]  = Number(pick.ID);\n  json["Staff Name"] = pick.FullName;\n\n  // optional cleanup so the big list disappears from the output\n  delete json.staffList;\n  delete json.data;\n\n  return { json };\n});\n`
+type	"n8n-nodes-base.code"
+typeVersion	2
+position	
+0	2140
+1	-480
+id	"105c5111-83d1-4eb7-b09f-66c6f3b1aa80"
+name	'Randomly assigning workers for the "Confirmed" bookings to get the placeholder calendar'
+13	
+parameters	
+jsCode	`const cutoff = new Date('2025-07-01T00:00:00Z');\n\nfunction toDate(dateStr, timeStr) {\n  const [m,d,y] = String(dateStr||'').split(/[\\/\\-]/).map(n=>parseInt(n,10));\n  const [H,Mi,S=0] = String(timeStr||'00:00:00').split(':').map(n=>parseInt(n,10));\n  if (!y || !m || !d) return null;\n  return new Date(y, m-1, d, H, Mi, S);\n}\n\nconst out = items\n  .map(({json}) => {\n    const dt = toDate(json["Date of Cleaning"], json["Time of Cleaning"]);\n    const statusNorm = String(json.Status||'').trim().toLowerCase();\n    return { json, dt, statusNorm };\n  })\n  .filter(x => x.dt && x.dt >= cutoff && x.statusNorm === 'pending')\n  .sort((a,b) => a.dt - b.dt)\n  .map((x,i) => ({\n    json: {\n      "Index": x.json.Index, // or i+1 to reindex\n      "Type of Cleaning": x.json["Type of Cleaning"],\n      "Client Name": x.json["Client Name"],\n      "Date of Cleaning": x.json["Date of Cleaning"],\n      "Time of Cleaning": x.json["Time of Cleaning"],\n      "Address Line": x.json["Address Line"],\n      "postal_code": x.json.postal_code,\n      "ward_district": x.json.ward_district,\n      "Status": x.json.Status\n    }\n  }));\n\nreturn out;\n`
+type	"n8n-nodes-base.code"
+typeVersion	2
+position	
+0	1160
+1	-1260
+id	"ddbe9735-4388-4362-965c-ea4d9cc6310a"
+name	"sorting through July 2025 dates and pending bookings"
+14	
+parameters	
+aggregate	"aggregateAllItemData"
+destinationFieldName	"confirmedList"
+include	"allFieldsExcept"
+fieldsToExclude	"Client Name, Type of Cleaning, Status"
+options	{}
+type	"n8n-nodes-base.aggregate"
+typeVersion	1
+position	
+0	2240
+1	-780
+id	"106dc5fd-42f4-485d-9163-7e9b9134352a"
+name	"Aggregating all confirmed bookings for assigninment of the next pending bookings"
+15	
+parameters	
+aggregate	"aggregateAllItemData"
+destinationFieldName	"staffList"
+include	"specifiedFields"
+fieldsToInclude	"ID, FullName"
+options	{}
+type	"n8n-nodes-base.aggregate"
+typeVersion	1
+position	
+0	1740
+1	-760
+id	"ca875fa4-ae17-4422-bd96-e49dc6fc5ca6"
+name	"Aggregate the Staff id and name columns into one string array"
+16	
+parameters	
+mode	"combine"
+combineBy	"combineAll"
+options	{}
+type	"n8n-nodes-base.merge"
+typeVersion	3.1
+position	
+0	1540
+1	-1240
+id	"4f295df2-9ab4-460d-991f-265e9bf65e2d"
+name	"Merging the pending bookings with the confirmed list"
+17	
+parameters	
+mode	"combine"
+combineBy	"combineAll"
+options	{}
+type	"n8n-nodes-base.merge"
+typeVersion	3.1
+position	
+0	1880
+1	-1260
+id	"0197b0e1-8e12-4ba3-9ca7-4318778a84af"
+name	"Merging the pending booking table with the confirmed list and the staff list for assigning workers"
+18	
+parameters	
+includeOtherFields	true
+include	"except"
+excludeFields	"staffList, confirmedList"
+options	{}
+type	"n8n-nodes-base.set"
+typeVersion	3.4
+position	
+0	2380
+1	-1260
+id	"2d9e2d19-885f-4822-ab8f-3fe40d3f74b7"
+name	"Dropping the staffList, and confirmedList columns for a cleaner table"
+19	
+parameters	
+operation	"update"
+documentId	
+__rl	true
+value	"1R6kDLFrC7hIt3dfbNCZm7k183je8a9MiawjYz_oOJjs"
+mode	"list"
+cachedResultName	"Cleaning Department"
+cachedResultUrl	"https://docs.google.com/spreadsheets/d/1R6kDLFrC7hIt3dfbNCZm7k183je8a9MiawjYz_oOJjs/edit?usp=drivesdk"
+sheetName	
+__rl	true
+value	2097357717
+mode	"list"
+cachedResultName	"Cleaning Booking"
+cachedResultUrl	"https://docs.google.com/spreadsheets/d/1R6kDLFrC7hIt3dfbNCZm7k183je8a9MiawjYz_oOJjs/edit#gid=2097357717"
+columns	
+mappingMode	"defineBelow"
+value	
+row_number	"={{ $json.Index }}"
+Status	"Confirmed"
+matchingColumns	
+0	"row_number"
+schema	
+0	
+id	"ID"
+displayName	"ID"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+1	
+id	"Service"
+displayName	"Service"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+2	
+id	"Recurring Client "
+displayName	"Recurring Client "
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+3	
+id	"Recurring Address"
+displayName	"Recurring Address"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+4	
+id	"Name"
+displayName	"Name"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+5	
+id	"Date"
+displayName	"Date"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+6	
+id	"Time"
+displayName	"Time"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+7	
+id	"Address"
+displayName	"Address"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+8	
+id	"Room Number"
+displayName	"Room Number"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+9	
+id	"Google Link"
+displayName	"Google Link"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+10	
+id	"Building Photo"
+displayName	"Building Photo"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+11	
+id	"Phone"
+displayName	"Phone"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+12	
+id	"Email"
+displayName	"Email"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+13	
+id	"Payment Type"
+displayName	"Payment Type"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+14	
+id	"Custom Price"
+displayName	"Custom Price"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+15	
+id	"Status"
+displayName	"Status"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+16	
+id	"Is Complete"
+displayName	"Is Complete"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+17	
+id	"Notes"
+displayName	"Notes"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+18	
+id	"Email Sent"
+displayName	"Email Sent"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+19	
+id	"Line Sent"
+displayName	"Line Sent"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+removed	true
+20	
+id	"row_number"
+displayName	"row_number"
+required	false
+defaultMatch	false
+display	true
+type	"string"
+canBeUsedToMatch	true
+readOnly	true
+removed	false
+attemptToConvertTypes	false
+convertFieldsToString	false
+options	{}
+type	"n8n-nodes-base.googleSheets"
+typeVersion	4.5
+position	
+0	2640
+1	-1460
+id	"7cce1891-e4a9-4f8d-97e8-fbe46d9bf520"
+name	"Updating the original sheet after pending bookings have assigned workers from status = Pending to status = Confirmed"
+credentials	
+googleSheetsOAuth2Api	
+id	"cJh33bfyxmSZNXwc"
+name	"Google Sheets account 7"
+20	
+parameters	
+pollTimes	
+item	
+0	
+hour	12
+documentId	
+__rl	true
+value	"1R6kDLFrC7hIt3dfbNCZm7k183je8a9MiawjYz_oOJjs"
+mode	"list"
+cachedResultName	"Cleaning Department"
+cachedResultUrl	"https://docs.google.com/spreadsheets/d/1R6kDLFrC7hIt3dfbNCZm7k183je8a9MiawjYz_oOJjs/edit?usp=drivesdk"
+sheetName	
+__rl	true
+value	2097357717
+mode	"list"
+cachedResultName	"Cleaning Booking"
+cachedResultUrl	"https://docs.google.com/spreadsheets/d/1R6kDLFrC7hIt3dfbNCZm7k183je8a9MiawjYz_oOJjs/edit#gid=2097357717"
+event	"rowAdded"
+options	{}
+type	"n8n-nodes-base.googleSheetsTrigger"
+typeVersion	1
+position	
+0	-120
+1	-1460
+id	"f594baa4-8ff9-40e3-a5f1-b9ddce38e96f"
+name	"Trigger – Google Sheets (row added) — Fires on new rows in “Cleaning Booking”"
+credentials	
+googleSheetsTriggerOAuth2Api	
+id	"wfslPWOzUYzWata6"
+name	"Google Sheets Trigger account 6"
+21	
+parameters	
+jsCode	"return items.map((item, index) => {\n  return {\n    json: {\n      Index: index + 1,\n      ...item.json\n    }\n  };\n});\n"
+type	"n8n-nodes-base.code"
+typeVersion	2
+position	
+0	-100
+1	-1200
+id	"2a1b5758-5260-4e50-988a-059f2777d95d"
+name	"Prep – Add Index — Adds stable Index to track/write back to source row."
+22	
+parameters	
+calendar	
+__rl	true
+value	"c_dab449feffca51a82526acd305216b3afb7588cd47c69e24ec89021c1ba49635@group.calendar.google.com"
+mode	"list"
+cachedResultName	"Tokyo Cleaner all Confirmed bookings Calendar(As MOCK Calendar in the flow) - Palak"
+start	"={{ $json.startRFC }}"
+end	"={{ $json.endRFC }}"
+additionalFields	
+summary	"={{ $json['Type of Cleaning'] }}-{{ $json['Staff Name'] }}({{ $json.ward_district }})"
+type	"n8n-nodes-base.googleCalendar"
+typeVersion	1.3
+position	
+0	2700
+1	-480
+id	"e8a322f2-1232-4e45-a3b7-2d9ce945b97d"
+name	"Creating the mock calendar for placeholder confirmed bookings"
+credentials	
+googleCalendarOAuth2Api	
+id	"tTYcIdlpaPkV9Lrt"
+name	"Google Calendar account 2"
+23	
+parameters	
+jsCode	"// Build Google Calendar-ready fields from your table rows.\n// - startRFC / endRFC (RFC 3339, Asia/Tokyo +09:00)\n// - durationHours (defaults to 2 if Hours missing)\n// - summary, location, description (strings for the event)\n// Throws a clear error if inputs are bad.\n\nconst TZ_OFFSET = '+09:00';   // Asia/Tokyo\nconst DEFAULT_HOURS = 2;\n\nfunction pad(n){ return String(n).padStart(2,'0'); }\n\nfunction parseYMD(dRaw){\n  // Supports \"yyyy-mm-dd\" or \"m/d/yyyy\"\n  if (/^\\d{4}-\\d{2}-\\d{2}/.test(dRaw)) {\n    const [y,m,d] = dRaw.split('-').map(Number);\n    return { y, m, d };\n  } else {\n    const [m,d,y] = dRaw.split(/[\\/\\-]/).map(Number);\n    return { y, m, d };\n  }\n}\n\nfunction buildRFC(j){\n  const dRaw = String(j[\"Date of Cleaning\"] || '').trim();\n  const tRaw = String(j[\"Time of Cleaning\"] || '00:00:00').trim();\n\n  if (!dRaw) return { ok:false, why:'missing \"Date of Cleaning\"' };\n\n  // Parse date\n  const { y, m, d } = parseYMD(dRaw);\n  if (!y || !m || !d) return { ok:false, why:`unparseable date \"${dRaw}\"` };\n\n  // Parse time HH:MM(:SS)\n  const [H,Mi,Sraw] = tRaw.split(':');\n  const Hn = parseInt(H ?? '0', 10);\n  const Min = parseInt(Mi ?? '0', 10);\n  const Sn = parseInt(Sraw ?? '0', 10);\n\n  const startRFC =\n    `${y}-${pad(m)}-${pad(d)}T${pad(Hn)}:${pad(Min)}:${pad(Sn)}${TZ_OFFSET}`;\n\n  const hrs = Number(j.Hours ?? DEFAULT_HOURS);\n  const dt = new Date(y, m-1, d, Hn, Min, Sn);\n  dt.setHours(dt.getHours() + hrs);\n\n  const endRFC =\n    `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}` +\n    `T${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}${TZ_OFFSET}`;\n\n  // Validate RFC 3339 shape\n  const rfc = /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$/;\n  if (!rfc.test(startRFC)) return { ok:false, why:`bad startRFC \"${startRFC}\"` };\n  if (!rfc.test(endRFC))   return { ok:false,  why:`bad endRFC \"${endRFC}\"` };\n  if (new Date(endRFC) <= new Date(startRFC))\n    return { ok:false, why:'end <= start' };\n\n  // Build nice strings for Calendar\n  const type = j[\"Type of Cleaning\"] || '';\n  const client = j[\"Client Name\"] || '';\n  const staff = j[\"Staff Name\"] || '';\n  const ward = j.ward_district || '';\n  const address = j[\"Address Line\"] || '';\n  const postal = j.postal_code || '';\n  const idx = j.Index ?? '';\n\n  const summary = `${type} — ${client} (${staff}) - ${ward}`;\n  const location = address;\n\n  const description =\n`Index: ${idx}\nStaff: ${staff} (#${j[\"Staff ID\"] ?? ''})\nWard: ${ward}\nPostal: ${postal}\nHours: ${hrs}\nAddress: ${address}`;\n\n  return {\n    ok:true,\n    startRFC, endRFC, hrs,\n    summary, location, description\n  };\n}\n\nfor (let i=0; i<items.length; i++){\n  const j = items[i].json;\n  const res = buildRFC(j);\n  if (!res.ok) {\n    throw new Error(`Item ${i} (Index ${j.Index ?? 'n/a'}): ${res.why}. Date=\"${j[\"Date of Cleaning\"]}\", Time=\"${j[\"Time of Cleaning\"]}\"`);\n  }\n  j.startRFC = res.startRFC;\n  j.endRFC = res.endRFC;\n  j.durationHours = res.hrs;\n  j.summary = res.summary;\n  j.location = res.location;\n  j.description = res.description;\n}\n\nreturn items;\n"
+type	"n8n-nodes-base.code"
+typeVersion	2
+position	
+0	2620
+1	-1260
+id	"312e946e-c780-4a9c-9579-d3e058950465"
+name	"Code for mapping the new pending bookings with assigned workers to the google calendar- Time – Build RFC3339 (JST) — startRFC, endRFC from sheet date/time"
+24	
+parameters	
+jsCode	"// Build RFC 3339 start/end from \"Date of Cleaning\" + \"Time of Cleaning\".\n// Default duration: 2h if Hours missing. Throws a clear error if inputs are bad.\n\nfunction pad(n){ return String(n).padStart(2,'0'); }\n\nfunction buildRFC(j){\n  const dRaw = String(j[\"Date of Cleaning\"] || '').trim();   // e.g. 7/4/2025\n  const tRaw = String(j[\"Time of Cleaning\"] || '00:00:00').trim(); // e.g. 12:00:00\n  if (!dRaw) return { ok:false, why:'missing \"Date of Cleaning\"' };\n\n  // Parse date (supports yyyy-mm-dd or m/d/yyyy)\n  let y,m,d;\n  if (/^\\d{4}-\\d{2}-\\d{2}/.test(dRaw)) {\n    [y,m,d] = dRaw.split('-').map(Number);\n  } else {\n    [m,d,y] = dRaw.split(/[\\/\\-]/).map(Number);\n  }\n  if (!y || !m || !d) return { ok:false, why:`unparseable date \"${dRaw}\"` };\n\n  // Parse time HH:MM(:SS)\n  const [H,Mi,S=0] = tRaw.split(':').map(n => parseInt(n,10));\n  const startRFC = `${y}-${pad(m)}-${pad(d)}T${pad(H)}:${pad(Mi)}:${pad(S)}+09:00`; // Asia/Tokyo\n\n  const hrs = Number(j.Hours ?? 2);\n  const dt = new Date(y, m-1, d, H, Mi, S);\n  dt.setHours(dt.getHours() + hrs);\n  const endRFC = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}+09:00`;\n\n  // Validate RFC 3339 shape\n  const rfc = /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$/;\n  if (!rfc.test(startRFC)) return { ok:false, why:`bad startRFC \"${startRFC}\"` };\n  if (!rfc.test(endRFC))   return { ok:false,  why:`bad endRFC \"${endRFC}\"` };\n  if (new Date(endRFC) <= new Date(startRFC)) return { ok:false, why:'end <= start' };\n\n  j.startRFC = startRFC;\n  j.endRFC = endRFC;\n  j.durationHours = hrs;\n  return { ok:true };\n}\n\nfor (let i=0; i<items.length; i++){\n  const j = items[i].json;\n  const res = buildRFC(j);\n  if (!res.ok) {\n    throw new Error(`Item ${i} (Index ${j.Index ?? 'n/a'}): ${res.why}. Date=\"${j[\"Date of Cleaning\"]}\", Time=\"${j[\"Time of Cleaning\"]}\"`);\n  }\n}\n\nreturn items;\n"
+type	"n8n-nodes-base.code"
+typeVersion	2
+position	
+0	2400
+1	-480
+id	"6a01e31d-72bb-4838-8871-ccc3ff42d180"
+name	"Time – Build RFC3339 (JST) — startRFC, endRFC from sheet date/time"
+25	
+parameters	
+jsCode	"/****************************************************\n GOAL (with 1-hour rest)\n For each PENDING booking, pick ONE staff member who:\n  1) has fewer than 3 jobs that day (daily cap = 3)\n  2) doesn't overlap in time with their existing jobs\n  3) has at least a 1-hour REST GAP before and after each job\n  4) is \"close\" — prefer same ward, then same postal prefix\n  5) if several fit, pick the least-loaded (then random tie-break)\n We also update our in-memory “busy map” as we assign, so later\n pending bookings see earlier assignments.\n\n HOW THE REST GAP IS ENFORCED\n We store each job as a *buffered* busy interval:\n   [start - REST, end + REST]\n This means a new job cannot start within REST minutes after a job\n ends, nor end within REST minutes before a job starts.\n****************************************************/\n\n// ========== SETTINGS YOU CAN TWEAK ==========\nconst DEFAULT_HOURS = 2;   // if your rows have no \"Hours\" column, assume 2 hours per job\nconst REST_MINUTES  = 60;  // <-- 1 hour rest buffer; change to 30 for a 30-min gap, etc.\nconst DAILY_CAP     = 3;   // maximum jobs allowed per staff per day\n\n// *** Only these 3 staff can be assigned (by ID) ***\nconst ALLOWED_IDS = new Set(['7','32','38']); // John(7), Marjorie(32), Teresa(38)\n\n// ========== SMALL HELPER FUNCTIONS ==========\n\n// normalize ID like 7, \"7\", \"7.0\", \" 7 \" -> \"7\"\nconst idStr = v => String(v ?? '').replace(/\\.0$/,'').trim();\n\n// pad(7) -> \"07\" (useful for YYYY-MM-DD strings)\nconst pad = n => String(n).padStart(2, '0');\n\n// Normalize ward names so \"Shinjuku\", \"Shinjuku City\", \"Shinjuku-ku\" match.\nconst normWard = w => String(w || '')\n  .replace(/\\s+City$/i, '')  // remove \" City\"\n  .replace(/-?ku$/i, '')     // remove \"-ku\" or \"ku\"\n  .trim()\n  .toLowerCase();\n\n// Turn \"7/1/2025\" or \"2025-07-01\" into \"2025-07-01\".\nconst dayKey = d => {\n  const s = String(d || '');\n  if (/^\\d{4}-\\d{2}-\\d{2}/.test(s)) return s.slice(0, 10);\n  const [m, dd, y] = s.split(/[\\/\\-]/).map(Number);\n  return `${y}-${pad(m)}-${pad(dd)}`;\n};\n\n// Convert \"HH:MM(:SS)\" to minutes since midnight. \"13:30\" -> 810.\nconst minutesOf = t => {\n  const [H, Mi] = String(t || '0:0').split(':').map(n => parseInt(n, 10));\n  return (H || 0) * 60 + (Mi || 0);\n};\n\n// Do two time intervals [aS,aE) and [bS,bE) overlap?\nconst overlap = (aS, aE, bS, bE) => Math.max(aS, bS) < Math.min(aE, bE);\n\n// First 3 digits of a postal code (e.g., \"151-0062\" -> \"151\")\nconst postal3 = s => String(s || '').replace(/\\D/g, '').slice(0, 3);\n\n// Clamp a minute value to sane bounds (0..(24*60)) just to be safe\nconst clampDayMinute = v => Math.max(0, Math.min(24*60, v));\n\n// ========== READ THE SHARED ARRAYS ==========\n// After the two Merge nodes, EVERY pending row should carry BOTH:\n//   - confirmedList: all confirmed jobs (with staff + time info)\n//   - staffList: the full roster (ID + FullName)\n\nconst first = items[0]?.json || {};\nconst confirmedList = first.confirmedList || [];\nconst staffList     = first.staffList || [];\n\nif (!Array.isArray(confirmedList) || !Array.isArray(staffList)) {\n  throw new Error(\n    'Missing confirmedList or staffList. ' +\n    'Ensure both were aggregated into ONE item and merged with \"All possible combinations\".'\n  );\n}\n\n// ***** Restrict the roster to ONLY the 3 allowed IDs *****\nconst roster = staffList.filter(s => ALLOWED_IDS.has(idStr(s.ID)));\nif (roster.length === 0) {\n  const sample = staffList.slice(0,10).map(s => ({ ID: s.ID, FullName: s.FullName }));\n  throw new Error('No allowed staff found (IDs 7,32,38). Sample of staffList: ' + JSON.stringify(sample));\n}\n\n/*\nWe build a per-day schedule \"dayStats\" keyed by day and staff:\n  dayStats[day][staffId] = {\n    count: number of jobs that day,\n    slots: [ [startBufferedMin, endBufferedMin], ... ],  // buffered with REST_MINUTES\n    wards: Set of normalized wards they’re visiting that day,\n    p3s:   Set of postal prefixes they’re visiting that day\n  }\n\nIMPORTANT: We store SLOTS AS *BUFFERED* INTERVALS.\nThat’s how we enforce the 1-hour rest gap between bookings.\n*/\nconst dayStats = {};\nconst getStat = (day, sid) => {\n  dayStats[day] ??= {};\n  return (dayStats[day][sid] ??= { count: 0, slots: [], wards: new Set(), p3s: new Set() });\n};\n\n// Seed dayStats from CONFIRMED jobs, but only for the allowed 3\nfor (const c of confirmedList) {\n  const day = dayKey(c[\"Date of Cleaning\"]);\n  const sid = idStr(c[\"Staff ID\"]);\n  if (!day || !sid) continue;\n  if (!ALLOWED_IDS.has(sid)) continue;  // ignore non-allowed staff\n\n  const start  = minutesOf(c[\"Time of Cleaning\"]);\n  const durHrs = Number(c.Hours ?? DEFAULT_HOURS);\n  const end    = start + Math.round(durHrs * 60);\n\n  // BUFFER the interval by REST_MINUTES on both sides\n  const bufStart = clampDayMinute(start - REST_MINUTES);\n  const bufEnd   = clampDayMinute(end   + REST_MINUTES);\n\n  const w = normWard(c.ward_district);\n  const p = postal3(c.postal_code);\n\n  const st = getStat(day, sid);\n  st.count += 1;                      // counts real jobs (not buffers)\n  st.slots.push([bufStart, bufEnd]);  // store buffered intervals\n  if (w) st.wards.add(w);\n  if (p) st.p3s.add(p);\n}\n\n// Check if a staff can take a job at [start,end] given the buffered slots\nfunction canTake(day, sid, start, end, limit = DAILY_CAP) {\n  const st = getStat(day, sid);\n  if (st.count >= limit) return false;   // daily cap hit\n\n  // BUFFER the candidate interval as well\n  const candStart = clampDayMinute(start - REST_MINUTES);\n  const candEnd   = clampDayMinute(end   + REST_MINUTES);\n\n  // If any existing buffered slot overlaps the candidate buffered slot, reject\n  for (const [s, e] of st.slots) {\n    if (overlap(s, e, candStart, candEnd)) return false;\n  }\n  return true;\n}\n\n// ========== PROCESS THE PENDING JOBS ==========\n// Sort pending by date+time so earlier jobs get assigned first.\nconst pending = items.map((it, i) => ({ i, json: it.json }));\npending.sort((a, b) => {\n  const da = dayKey(a.json[\"Date of Cleaning\"]);\n  const db = dayKey(b.json[\"Date of Cleaning\"]);\n  if (da !== db) return da < db ? -1 : 1;\n  return minutesOf(a.json[\"Time of Cleaning\"]) - minutesOf(b.json[\"Time of Cleaning\"]);\n});\n\nfor (const row of pending) {\n  const j = row.json;\n\n  // Compute the day string and start/end minutes for THIS pending job\n  const day    = dayKey(j[\"Date of Cleaning\"]);\n  const start  = minutesOf(j[\"Time of Cleaning\"]);\n  const durHrs = Number(j.Hours ?? DEFAULT_HOURS);\n  const end    = start + Math.round(durHrs * 60);\n\n  // Normalized ward + postal prefix for proximity scoring\n  const w = normWard(j.ward_district);\n  const p = postal3(j.postal_code);\n\n  // Build candidate list: must pass (cap + no overlap + 1h rest via buffered slots)\n  const candidates = roster\n    .map(s => {\n      const sid = idStr(s.ID);\n      if (!sid || !canTake(day, sid, start, end, DAILY_CAP)) return null;\n\n      const st = getStat(day, sid);        // staff's current day state\n      const sameWardToday = w && st.wards.has(w);\n      const sameP3Today   = p && st.p3s.has(p);\n\n      // Lower score is better:\n      //   - prefer same ward (0 else +2)\n      //   - prefer same postal3 (0 else +1)\n      //   - small penalty for being already busy (st.count/10)\n      const score = (sameWardToday ? 0 : 2) + (sameP3Today ? 0 : 1) + (st.count / 10);\n      return { s, sid, score, load: st.count };\n    })\n    .filter(Boolean)\n    .sort((a, b) => a.score - b.score || a.load - b.load || (Math.random() - 0.5));\n\n  // Pick best candidate\n  let pick = candidates[0];\n\n  // Fallback: if no one qualifies (overlap/cap), try least-loaded among the same 3 (still under cap)\n  if (!pick) {\n    const underCap = roster\n      .map(s => {\n        const sid = idStr(s.ID);\n        const load = getStat(day, sid).count;\n        return { s, sid, load };\n      })\n      .filter(c => c.sid && c.load < DAILY_CAP)\n      .sort((a, b) => a.load - b.load || (Math.random() - 0.5));\n    pick = underCap[0];\n    if (pick) j.assignment_conflict = true; // mark for manual review\n  }\n\n  // If we found someone, assign and update the day state (with buffered slot!)\n  if (pick) {\n    j[\"Staff ID\"]   = Number(pick.sid);\n    j[\"Staff Name\"] = pick.s.FullName;\n\n    // Update the staff's day state so later pending jobs see this new booking\n    const st = getStat(day, pick.sid);\n    st.count += 1;\n\n    // Store a *buffered* busy slot for the new assignment:\n    const bufStart = clampDayMinute(start - REST_MINUTES);\n    const bufEnd   = clampDayMinute(end   + REST_MINUTES);\n    st.slots.push([bufStart, bufEnd]);\n\n    if (w) st.wards.add(w);\n    if (p) st.p3s.add(p);\n  } else {\n    // Truly no one available (over cap and fallback found nobody)\n    j[\"Staff ID\"]   = null;\n    j[\"Staff Name\"] = null;\n    j.assignment_conflict = true;\n  }\n}\n\n// Return in original order (tidy)\nreturn pending.sort((a, b) => a.i - b.i ).map(r => ({ json: r.json }));\n"
+type	"n8n-nodes-base.code"
+typeVersion	2
+position	
+0	2120
+1	-1260
+id	"eadfc75a-abe8-4fb2-9170-30d956866046"
+name	"Writing code for assigning workers to pending bookings based on availability, proximity, and working hours - Also filtering out 3 main workers"
+26	
+parameters	
+calendar	
+__rl	true
+value	"c_4a379ccee34e7aba0dadecfca009f3bdf1633e8b96991f84fbd8e35a4499a75a@group.calendar.google.com"
+mode	"list"
+cachedResultName	"Tokyo Cleaner - Main worker Calendar- after assigning(Palak)"
+start	"={{ $json.startRFC }}"
+end	"={{ $json.endRFC }}"
+additionalFields	
+summary	"={{ $json['Type of Cleaning'] }}-{{ $json['Staff Name'] }}({{ $json.ward_district }})"
+type	"n8n-nodes-base.googleCalendar"
+typeVersion	1.3
+position	
+0	2640
+1	-940
+id	"51e3f2bc-209b-45da-a0b4-b5c4dd6b807c"
+name	"Google Calendar with all the finalized confirmed bookings for the 3 main workers"
+credentials	
+googleCalendarOAuth2Api	
+id	"tTYcIdlpaPkV9Lrt"
+name	"Google Calendar account 2"
+pinData	{}
+connections	
+If	
+main	
+0	
+0	
+node	"preparing and encoding the address string so that it's safe to include in a URL for the Google Maps API. - ADDS A ENCODING ADDRESS COLUMN"
+type	"main"
+index	0
+1	
+0	
+node	"Taking the entries that did not need an API and removing the needsAPI column for clarity"
+type	"main"
+index	0
+Normalizing table - deleteing missing address rows, only keeping the important columns, and renaming (deleted 5 entries)	
+main	
+0	
+0	
+node	"If"
+type	"main"
+index	0
+preparing and encoding the address string so that it's safe to include in a URL for the Google Maps API. - ADDS A ENCODING ADDRESS COLUMN	
+main	
+0	
+0	
+node	"HTTP Request - google maps API to find missing postal code and ward district"
+type	"main"
+index	0
+1	
+node	"Merging the two tables to get one output table"
+type	"main"
+index	0
+HTTP Request - google maps API to find missing postal code and ward district	
+main	
+0	
+0	
+node	"Merging the two tables to get one output table"
+type	"main"
+index	1
+Merging the two tables to get one output table	
+main	
+0	
+0	
+node	"Finalizing the table to get all entries that needed API into one table with all desired columns"
+type	"main"
+index	0
+Finalizing the table to get all entries that needed API into one table with all desired columns	
+main	
+0	
+0	
+node	"Merging both the tables together - 1) entries that needed an API, 2) entries that did not into one table"
+type	"main"
+index	0
+Taking the entries that did not need an API and removing the needsAPI column for clarity	
+main	
+0	
+0	
+node	"Merging both the tables together - 1) entries that needed an API, 2) entries that did not into one table"
+type	"main"
+index	1
+Merging both the tables together - 1) entries that needed an API, 2) entries that did not into one table	
+main	
+0	
+0	
+node	"Sorting by ascending index"
+type	"main"
+index	0
+Sorting by ascending index	
+main	
+0	
+0	
+node	"Sorting by date July 2025 and beyond and by confirmed status to create a placeholder calendar"
+type	"main"
+index	0
+1	
+node	"sorting through July 2025 dates and pending bookings"
+type	"main"
+index	0
+Sorting by date July 2025 and beyond and by confirmed status to create a placeholder calendar	
+main	
+0	
+0	
+node	"Reading the staff ID and name sheet"
+type	"main"
+index	0
+1	
+node	"Merge the tables into one with the staff id and name info included"
+type	"main"
+index	0
+Reading the staff ID and name sheet	
+main	
+0	
+0	
+node	"Aggregate the Staff id and name columns into one string array"
+type	"main"
+index	0
+Merge the tables into one with the staff id and name info included	
+main	
+0	
+0	
+node	'Randomly assigning workers for the "Confirmed" bookings to get the placeholder calendar'
+type	"main"
+index	0
+Randomly assigning workers for the "Confirmed" bookings to get the placeholder calendar	
+main	
+0	
+0	
+node	"Time – Build RFC3339 (JST) — startRFC, endRFC from sheet date/time"
+type	"main"
+index	0
+1	
+node	"Aggregating all confirmed bookings for assigninment of the next pending bookings"
+type	"main"
+index	0
+Aggregating all confirmed bookings for assigninment of the next pending bookings	
+main	
+0	
+0	
+node	"Merging the pending bookings with the confirmed list"
+type	"main"
+index	1
+sorting through July 2025 dates and pending bookings	
+main	
+0	
+0	
+node	"Merging the pending bookings with the confirmed list"
+type	"main"
+index	0
+Aggregate the Staff id and name columns into one string array	
+main	
+0	
+0	
+node	"Merge the tables into one with the staff id and name info included"
+type	"main"
+index	1
+1	
+node	"Merging the pending booking table with the confirmed list and the staff list for assigning workers"
+type	"main"
+index	0
+Merging the pending bookings with the confirmed list	
+main	
+0	
+0	
+node	"Merging the pending booking table with the confirmed list and the staff list for assigning workers"
+type	"main"
+index	1
+Merging the pending booking table with the confirmed list and the staff list for assigning workers	
+main	
+0	
+0	
+node	"Writing code for assigning workers to pending bookings based on availability, proximity, and working hours - Also filtering out 3 main workers"
+type	"main"
+index	0
+Dropping the staffList, and confirmedList columns for a cleaner table	
+main	
+0	
+0	
+node	"Code for mapping the new pending bookings with assigned workers to the google calendar- Time – Build RFC3339 (JST) — startRFC, endRFC from sheet date/time"
+type	"main"
+index	0
+Trigger – Google Sheets (row added) — Fires on new rows in “Cleaning Booking”	
+main	
+0	
+0	
+node	"Prep – Add Index — Adds stable Index to track/write back to source row."
+type	"main"
+index	0
+Prep – Add Index — Adds stable Index to track/write back to source row.	
+main	
+0	
+0	
+node	"Normalizing table - deleteing missing address rows, only keeping the important columns, and renaming (deleted 5 entries)"
+type	"main"
+index	0
+Code for mapping the new pending bookings with assigned workers to the google calendar- Time – Build RFC3339 (JST) — startRFC, endRFC from sheet date/time	
+main	
+0	
+0	
+node	"Google Calendar with all the finalized confirmed bookings for the 3 main workers"
+type	"main"
+index	0
+1	
+node	"Updating the original sheet after pending bookings have assigned workers from status = Pending to status = Confirmed"
+type	"main"
+index	0
+Time – Build RFC3339 (JST) — startRFC, endRFC from sheet date/time	
+main	
+0	
+0	
+node	"Creating the mock calendar for placeholder confirmed bookings"
+type	"main"
+index	0
+Writing code for assigning workers to pending bookings based on availability, proximity, and working hours - Also filtering out 3 main workers	
+main	
+0	
+0	
+node	"Dropping the staffList, and confirmedList columns for a cleaner table"
+type	"main"
+index	0
+Google Calendar with all the finalized confirmed bookings for the 3 main workers	
+main	
+0	[]
+active	false
+settings	
+executionOrder	"v1"
+versionId	"5253310b-f9d8-4826-ae4a-f52544ded997"
+meta	
+templateCredsSetupCompleted	true
+instanceId	"1236512d9bd17a8190c63cffcfccf178b557d0063310738d19da2278a2472584"
+id	"to5pa7lNpDrvZlmj"
+tags	[]
+}
