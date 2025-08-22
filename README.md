@@ -1,4 +1,4 @@
-# Tokyo Cleaner Calendar Agent (n8n + Google Sheets/Calendar)
+# AI Calendar Agent - n8n
 
 > Automates scheduling: new rows in a Google Sheet → conflict-free Google Calendar events with address enrichment, capacity/rest rules, proximity preference, and write-back.
 
