@@ -34,15 +34,6 @@ Here’s the automated workflow for booking, staff assignment, and calendar inte
 
 See the detailed diagrams and data contracts in `/docs`.
 
-## Quickstart
-1. **Prereqs**: n8n, Google Sheets/Calendar OAuth creds, Google Maps Geocoding API key.
-2. **Import** `workflow/tokyo-cleaner-n8n.json` into n8n.  
-   *(Replace any placeholder keys with your own.)*
-3. Point the Google Sheets/Calendar nodes at your docs/calendars.
-4. Add your images to `/assets` (same filenames as above).
-5. Run the trigger; verify events appear on both calendars.
-6. (Optional) Enable write-back to set `Status=Confirmed` and store event IDs.
-
 ## Configuration
 | Setting           | Default | Meaning                                   |
 |-------------------|---------|-------------------------------------------|
