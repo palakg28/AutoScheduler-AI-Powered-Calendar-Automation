@@ -93,3 +93,13 @@ By combining **data handling, automation, and business optimization**, this proj
 ---
 ## License
 MIT – see [LICENSE](LICENSE).
+
+## ☕ About Me
+
+Hi! I’m **Palak Gupta**, a Mathematics–Computer Science student with a deep interest in data analytics, business intelligence, and data engineering. I enjoy building real-world projects that combine technical skill with business insight, using tools like SQL, Docker, Notion, and automation platforms like n8n.
+
+📫 **Let’s connect**:  
+- 🔗 [LinkedIn](https://www.linkedin.com/in/palakgupta28/)  
+- 📧 [palakgupta0824@gmail.com](mailto:palakgupta0824@gmail.com)  
+
+---
