@@ -91,8 +91,6 @@ By combining **data handling, automation, and business optimization**, this proj
 - `/images` – Workflow screenshots and visualizations.  
 
 ---
-## License
-MIT – see [LICENSE](LICENSE).
 
 ## ☕ About Me
 
