@@ -100,6 +100,6 @@ Hi! I’m **Palak Gupta**, a Mathematics–Computer Science student with a deep 
 
 📫 **Let’s connect**:  
 - 🔗 [LinkedIn](https://www.linkedin.com/in/palakgupta28/)  
-- 📧 [palakgupta0824@gmail.com](mailto:palakgupta0428@gmail.com)  
+- 📧 [palakgupta0428@gmail.com](mailto:palakgupta0428@gmail.com)  
 
 ---
