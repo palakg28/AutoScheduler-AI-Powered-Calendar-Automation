@@ -13,17 +13,6 @@ Built with **n8n** and integrated APIs, the system automates data enrichment, ap
 
 ---
 
-## What this repo shows
-- **End-to-end workflow** turning spreadsheet bookings into **calendar events**.
-- **Address enrichment** (Google Maps Geocoding) → consistent `postal_code` + `ward_district`.
-- **Scheduling engine** with **max 3 jobs/day**, **no overlaps**, and **1-hour rest buffers**.
-- **Proximity** preference (same ward → same postal prefix), **load-balancing**, and fallback logic.
-- **Dual calendars**: demo/mock for existing confirmed bookings and final for newly assigned ones.
-- **Write-back** to the sheet (`Status = Confirmed`), with guidance for event IDs/links (idempotency).
-- **Screenshots** of the workflow and the resulting calendars (proof & visualization).
-- **Skills demonstrated**: n8n, Google Sheets/Calendar APIs, HTTP/REST, regex/JS data cleaning,
-  scheduling algorithms, RFC 3339 time handling, and production-style documentation.
-
 ## Visuals
 Here’s the automated workflow for booking, staff assignment, and calendar integration:
 
@@ -95,6 +84,12 @@ This system showcases my ability to **bridge technical engineering with business
 By combining **data handling, automation, and business optimization**, this project highlights the exact skills required for roles in **Business Analytics, Data Analytics, and Business Intelligence**.  
 
 ---
+## 📂 Repository Guide  
+- `/docs` – Architecture diagrams, scheduling rules, data contracts, troubleshooting.  
+- `/workflow` – n8n JSON export and configuration notes.  
+- `/examples` – Sample booking data and validation scripts.  
+- `/images` – Workflow screenshots and visualizations.  
 
+---
 ## License
 MIT – see [LICENSE](LICENSE).
